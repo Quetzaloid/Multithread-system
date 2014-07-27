@@ -1,0 +1,115 @@
+#include <stdlib.h>
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <iomanip>
+#include <string>
+#include <cstdlib>
+#include <cassert>
+#include <pthread.h>
+#include <sys/time.h>
+
+using   namespace std;
+
+pthread_t   *ThParam;
+pthread_t   *ThHandle;
+
+int         *inputMat   = NULL;
+int         *outputMat  = NULL;
+int          NumThreads = 1;
+int          ChunkSize  = 0;
+int          RemainDer  = 0;
+int          numCols, numRows;
+
+void  *thr_fn(void *thIdx);
+
+
+int main(int argc, char *argv[]) 
+{
+    NumThreads = 1;
+
+    if ( argc>0 )
+       {
+         NumThreads = atoi(argv[1]);
+       }
+    ThParam  = (pthread_t *)malloc(sizeof(pthread_t)*NumThreads);
+    ThHandle = (pthread_t *)malloc(sizeof(pthread_t)*NumThreads);
+
+    /////////////////////////////
+    ifstream iFile;
+
+    string fileName = argv[2];
+    iFile.open(fileName.c_str());
+    if (!iFile)
+       {
+         cout<<"Error: Cannot open file !"<<endl;
+         exit(1);
+       }
+    iFile>>numCols>> numRows;
+
+    inputMat  = (int*)malloc(sizeof(int)*numCols*numRows);
+    outputMat = (int*)malloc(sizeof(int)*numCols*numRows);
+    //Input Data
+    for(int i=0; i<numCols*numRows; i++)
+       {
+         iFile>> inputMat[i];
+       }
+    iFile.close();
+    ChunkSize = numRows/NumThreads;
+    RemainDer = numRows%NumThreads;
+    //////////////////////////////////////////////
+    ///////MATRIX MULTIPLICATION//////////////////
+    //////////////////////////////////////////////
+    int ThCreate;
+    for(int i=0; i<NumThreads; i++)
+       {
+         ThParam[i] = i;
+         ThCreate   = pthread_create(&ThHandle[i], NULL, thr_fn, (void *)&ThParam[i]);
+         if (ThCreate != 0)
+            {
+              cout<<"!!!!!THREAD "<<i<<" CREATION FAILED ... Exiting abruptly"<<endl<<endl;
+              exit(1);
+            }
+       }
+
+    for(int i=0; i<NumThreads; i++)
+       {
+         pthread_join(ThHandle[i], NULL);
+       }
+
+    for(int i=0; i<numRows; i++)
+       {
+         for(int j=0; j<numCols; j++)
+            {
+              cout<<outputMat[i*numRows+j]<<" ";
+            }
+         cout<<endl;
+       }
+
+    ///////////Memory Free
+    free(inputMat);
+    free(outputMat);
+    free(ThParam);
+    free(ThHandle);
+    return(0);
+}
+
+void  *thr_fn(void *thIdx)
+{
+  int tIndex = *((int *) thIdx);
+  int offset = (tIndex<RemainDer)? 1:0;
+
+  for(int i=0; i<ChunkSize+offset; i++)
+     {
+       int rowIndex = tIndex + i*NumThreads;
+       for(int j=0; j<numCols; j++)
+          {
+            int DotProduct = 0;
+            for(int k=0; k<numRows; k++)
+               {
+                 DotProduct += inputMat[rowIndex*numRows+k]*inputMat[k*numRows+j];
+               }
+            outputMat[rowIndex*numRows+j] = DotProduct;
+          }
+     }
+}
